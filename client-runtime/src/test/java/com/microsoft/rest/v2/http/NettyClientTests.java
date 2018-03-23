@@ -1,6 +1,7 @@
 package com.microsoft.rest.v2.http;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -11,6 +12,8 @@ import java.net.Socket;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -19,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -29,6 +33,8 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 
 import io.reactivex.Completable;
+import io.reactivex.Flowable;
+import io.reactivex.Single;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subscribers.TestSubscriber;
 
@@ -41,7 +47,7 @@ public class NettyClientTests {
 
     @BeforeClass
     public static void beforeClass() {
-        server = new WireMockServer(WireMockConfiguration.options().dynamicPort());
+        server = new WireMockServer(WireMockConfiguration.options().dynamicPort().disableRequestJournal());
         server.stubFor(
                 WireMock.get("/short").willReturn(WireMock.aResponse().withBody(SHORT_BODY)));
         server.stubFor(WireMock.get("/long").willReturn(WireMock.aResponse().withBody(LONG_BODY)));
@@ -71,7 +77,7 @@ public class NettyClientTests {
     private void checkBodyReceived(String expectedBody, String path) {
         HttpClient client = HttpClient.createDefault();
         HttpResponse response = doRequest(client, path);
-        String s = new String(response.bodyAsByteArrayAsync().blockingGet(),
+        String s = new String(response.bodyAsByteArray().blockingGet(),
                 StandardCharsets.UTF_8);
         assertEquals(expectedBody, s);
     }
@@ -84,10 +90,10 @@ public class NettyClientTests {
 
     @Test
     public void testMultipleSubscriptionsEmitsError() {
-        HttpResponse response = makeRequest("/short");
-        response.bodyAsByteArrayAsync().blockingGet();
+        HttpResponse response = getResponse("/short");
+        response.bodyAsByteArray().blockingGet();
         // subscribe again
-        response.bodyAsByteArrayAsync() //
+        response.bodyAsByteArray() //
                 .test() //
                 .awaitDone(20, TimeUnit.SECONDS) //
                 .assertNoValues() //
@@ -96,8 +102,8 @@ public class NettyClientTests {
 
     @Test
     public void testCancel() throws InterruptedException {
-        HttpResponse response = makeRequest("/long");
-        TestSubscriber<ByteBuffer> ts = response.streamBodyAsync() //
+        HttpResponse response = getResponse("/long");
+        TestSubscriber<ByteBuffer> ts = response.body() //
                 .test(0) //
                 .requestMore(1) //
                 .awaitCount(1) //
@@ -113,9 +119,9 @@ public class NettyClientTests {
 
     @Test
     public void testFlowableWhenServerReturnsBodyAndNoErrorsWhenHttp500Returned() {
-        HttpResponse response = makeRequest("/error");
+        HttpResponse response = getResponse("/error");
         response //
-                .bodyAsStringAsync() //
+                .bodyAsString() //
                 .test() //
                 .awaitDone(20, TimeUnit.SECONDS) //
                 .assertValues("error") //
@@ -125,9 +131,9 @@ public class NettyClientTests {
 
     @Test
     public void testFlowableBackpressure() {
-        HttpResponse response = makeRequest("/long");
+        HttpResponse response = getResponse("/long");
         response //
-                .streamBodyAsync() //
+                .body() //
                 .test(0) //
                 .assertValueCount(0) //
                 .assertNoErrors() //
@@ -138,12 +144,6 @@ public class NettyClientTests {
                 .awaitCount(4) //
                 .requestMore(Long.MAX_VALUE) //
                 .awaitDone(20, TimeUnit.SECONDS).assertComplete();
-    }
-
-    private HttpResponse makeRequest(String path) {
-        HttpClient client = HttpClient.createDefault();
-        HttpRequest request = new HttpRequest("", HttpMethod.GET, url(server, path), null);
-        return client.sendRequestAsync(request).blockingGet();
     }
 
     @Test
@@ -211,14 +211,85 @@ public class NettyClientTests {
             HttpResponse response = client.sendRequestAsync(request).blockingGet();
             assertEquals(200, response.statusCode());
             System.out.println("reading body");
-            response.bodyAsByteArrayAsync() //
+            response.bodyAsByteArray() //
                     .test() //
-                    .awaitDone(1, TimeUnit.SECONDS) //
+                    .awaitDone(20, TimeUnit.SECONDS) //
                     .assertError(IOException.class) //
                     .assertErrorMessage("channel inactive");
         } finally {
             ss.close();
         }
+    }
+    
+    @Test
+    public void testConcurrentRequests() throws NoSuchAlgorithmException {
+        long t = System.currentTimeMillis();
+        int numRequests = 100; // 100 = 1GB of data read
+        long timeoutSeconds = 60;
+        HttpClient client = HttpClient.createDefault();
+        byte[] expectedDigest = digest(LONG_BODY);
+        long numBytes = Flowable.range(1, numRequests) //
+                // Note that WireMock default threads for accepting connections is 10
+                // we start 10 different threads each of which will deal with the range
+                // in round-robin fashion
+                .parallel(10) //
+                .runOn(Schedulers.io()) //
+                .flatMap(n -> Single //
+                        .fromCallable(() -> getResponse(client, "/long")) //
+                        .flatMapPublisher(response -> {
+                            MessageDigest md = MessageDigest.getInstance("MD5");
+                            return response //
+                                    .body() //
+                                    .doOnNext(bb -> md.update(bb)) //
+                                    .map(bb -> new NumberedByteBuffer(n, bb))
+                                    .doOnComplete(() -> System.out.println("completed " + n)) //
+                                    .doOnComplete(() -> Assert.assertArrayEquals("wrong digest!", expectedDigest,
+                                            md.digest()));
+                        }))
+                .sequential() //
+                // enable the doOnNext call to see request numbers and thread names
+                // .doOnNext(g -> System.out.println(g.n + " " +
+                // Thread.currentThread().getName())) //
+                .map(nbb -> (long) nbb.bb.limit()) //
+                .reduce((x, y) -> x + y) //
+                .subscribeOn(Schedulers.io()) //
+                .observeOn(Schedulers.io()) //
+                .test() //
+                .awaitDone(timeoutSeconds, TimeUnit.SECONDS) //
+                .assertComplete() //
+                .assertValueCount(1) //
+                .values() //
+                .get(0);
+        t = System.currentTimeMillis() - t;
+        System.out.println("totalBytesRead=" + numBytes / 1024 / 1024 + "MB in " + t / 1000.0 + "s");
+        assertEquals(numRequests * LONG_BODY.getBytes(StandardCharsets.UTF_8).length, numBytes);
+    }
+
+    private static byte[] digest(String s) throws NoSuchAlgorithmException {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update(s.getBytes(StandardCharsets.UTF_8));
+        byte[] expectedDigest = md.digest();
+        return expectedDigest;
+    }
+
+    private static final class NumberedByteBuffer {
+        final long n;
+        final ByteBuffer bb;
+
+        NumberedByteBuffer(long n, ByteBuffer bb) {
+            this.n = n;
+            this.bb = bb;
+        }
+    }
+
+    private static HttpResponse getResponse(String path) {
+        HttpClient client = HttpClient.createDefault();
+        return getResponse(client, path);
+    }
+
+    private static HttpResponse getResponse(HttpClient client, String path) {
+        HttpRequest request = new HttpRequest("", HttpMethod.GET, url(server, path), null);
+        return client.sendRequestAsync(request).blockingGet();
     }
 
     @Test
