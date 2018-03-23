@@ -333,12 +333,15 @@ public class RestProxyStressTests {
                 .zipWith(md5s, (id, md5) ->
                         service.download100M(String.valueOf(id), sas).flatMapCompletable(response -> {
                             final MessageDigest messageDigest = MessageDigest.getInstance("MD5");
-                            Flowable<ByteBuffer> content = response.body().doOnNext(buf -> messageDigest.update(buf.slice()));
+                            // Omitting ByteBuffer.slice() in doOnNext() here causes only empty ByteBuffers to be
+                            // written to files--however, this still exercises the threading behaviors we're interested in, so it's still useful.
+                            Flowable<ByteBuffer> content = response.body().doOnNext(messageDigest::update);
 
-                            return content.lastOrError().toCompletable().doOnComplete(() -> {
+                            AsynchronousFileChannel out = AsynchronousFileChannel.open(TEMP_FOLDER_PATH.resolve("100m-" + id + "-dl.dat"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                            return FlowableUtil.writeFile(content, out).doOnComplete(() -> {
                                 assertArrayEquals(md5, messageDigest.digest());
                                 LoggerFactory.getLogger(getClass()).info("Finished downloading and MD5 validated for " + id);
-                            });
+                            }).doOnTerminate(out::close);
                         }))
                 .flatMapCompletable(Functions.identity()).blockingAwait();
         long durationMilliseconds = Duration.between(downloadStart, Instant.now()).toMillis();
