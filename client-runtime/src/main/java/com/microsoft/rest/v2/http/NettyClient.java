@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import io.reactivex.Scheduler;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.slf4j.LoggerFactory;
@@ -647,9 +648,9 @@ public final class NettyClient extends HttpClient {
                 // Prevents channel from being closed when the Single<HttpResponse> is disposed
                 httpResponseEmitted = true;
 
-                //Scheduler scheduler = Schedulers.from(ctx.channel().eventLoop());
+                Scheduler scheduler = Schedulers.from(ctx.channel().eventLoop());
                 responseEmitter.onSuccess(
-                        new NettyResponse(response, contentEmitter));
+                        new NettyResponse(response, contentEmitter.subscribeOn(scheduler, false)));
             }
 
             if (msg instanceof HttpContent) {

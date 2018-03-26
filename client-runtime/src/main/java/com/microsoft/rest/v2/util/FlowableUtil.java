@@ -111,6 +111,7 @@ public final class FlowableUtil {
 
                     @Override
                     public void onSubscribe(Subscription s) {
+                        emitter.setCancellable(s::cancel);
                         subscription = s;
                         s.request(1);
                     }
