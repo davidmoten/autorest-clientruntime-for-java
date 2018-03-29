@@ -50,6 +50,7 @@ import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
+import io.netty.util.concurrent.SingleThreadEventExecutor;
 import io.reactivex.Flowable;
 import io.reactivex.FlowableSubscriber;
 import io.reactivex.Single;
@@ -150,7 +151,6 @@ public final class NettyClient extends HttpClient {
                         new NioEventLoopGroup(groupSize, new DefaultThreadFactory(NioEventLoopGroup.class, true)),
                         NioSocketChannel.class);
             }
-
             return result;
         }
 
@@ -872,7 +872,7 @@ public final class NettyClient extends HttpClient {
                 acquisitionListener.contentDone();
             } else {
                 // TODO Don't do this because doesn't respect backpressure
-                ctx.channel().read();
+                // ctx.channel().read();
             }
         }
 
