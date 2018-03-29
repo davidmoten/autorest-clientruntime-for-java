@@ -337,15 +337,16 @@ public class RestProxyStressTests {
                 .zipWith(md5s, (id, md5) ->
                         service.download100M(String.valueOf(id), sas).flatMapCompletable(response -> {
                             final MessageDigest messageDigest = MessageDigest.getInstance("MD5");
-                            Flowable<ByteBuffer> content = response.body()
-                                    .subscribeOn(Schedulers.io())
-                                    .rebatchRequests(1)
-                                    .doOnNext(buf -> messageDigest.update(buf.slice()));
-
-                            return content.lastOrError().toCompletable().doOnComplete(() -> {
-                                assertArrayEquals(md5, messageDigest.digest());
-                                LoggerFactory.getLogger(getClass()).info("Finished downloading and MD5 validated for " + id);
-                            });
+                            return response.body()
+                                .subscribeOn(Schedulers.io())
+                                .rebatchRequests(1)
+                                .doOnNext(buf -> messageDigest.update(buf.slice()))
+                                .lastOrError()
+                                .toCompletable()
+                                .doOnComplete(() -> {
+                                    assertArrayEquals(md5, messageDigest.digest());
+                                    LoggerFactory.getLogger(getClass()).info("Finished downloading and MD5 validated for " + id);
+                                });
                         }))
                 .flatMapCompletable(Functions.identity())
                 .subscribeOn(Schedulers.io())

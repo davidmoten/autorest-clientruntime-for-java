@@ -273,7 +273,7 @@ public final class NettyClient extends HttpClient {
             while (true) {
                 int s = state.get();
                 if (transition(s, ACQUIRING_DISPOSED, CHANNEL_RELEASED)) {
-                    channelPool.closeAndRelease(channel);
+                    closeAndReleaseChannel();
                     return;
                 } else if (transition(s, ACQUIRING_NOT_DISPOSED, ACQUIRED_CONTENT_NOT_SUBSCRIBED)) {
                     break;
@@ -488,6 +488,7 @@ public final class NettyClient extends HttpClient {
                     closeAndReleaseChannel();
                     return;
                 } else if (state.compareAndSet(s, s)) {
+                    System.out.println("contentDone "+ s);
                     return;
                 }
             }
@@ -759,6 +760,7 @@ public final class NettyClient extends HttpClient {
                 releaseQueue();
                 channelSubscription.cancel();
                 subscriber.onComplete();
+                System.out.println("complete");
                 acquisitionListener.contentDone();
                 return true;
             } else {
@@ -792,8 +794,11 @@ public final class NettyClient extends HttpClient {
         public void request(long n) {
             Preconditions.checkArgument(n == 1, "requests must be one at a time!");
             Channel c = channel.get();
-            if (c!=null) {
+            if (c != null) {
+                System.out.println("read");
                 c.read();
+            } else {
+                System.out.println("c is null");
             }
         }
 
@@ -837,6 +842,7 @@ public final class NettyClient extends HttpClient {
 
         @Override
         public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+            System.out.println("chunkCompleted");
             contentEmitter.chunkCompleted();
         }
 

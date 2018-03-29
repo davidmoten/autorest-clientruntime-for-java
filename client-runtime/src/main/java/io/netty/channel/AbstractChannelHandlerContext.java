@@ -956,25 +956,29 @@ abstract class AbstractChannelHandlerContext extends DefaultAttributeMap
     }
 
     final void setRemoved() {
-        for (;;) {
-            int oldState = handlerState;
-            if (oldState == REMOVE_PENDING) {
-                if (HANDLER_STATE_UPDATER.compareAndSet(this, oldState, REMOVE_COMPLETE)) {
-                    return;
-                }
-            } else {
-                return;
-            }
-        }
+        System.out.println(handlerState + "-> REMOVE_COMPLETE");
+        handlerState = REMOVE_COMPLETE;
+//        for (;;) {
+//            int oldState = handlerState;
+//            if (oldState == REMOVE_PENDING) {
+//                if (HANDLER_STATE_UPDATER.compareAndSet(this, oldState, REMOVE_COMPLETE)) {
+//                    System.out.println(oldState + "-> REMOVE_COMPLETE");
+//                    return;
+//                }
+//            } else {
+//                return;
+//            }
+//        }
     }
     
     public void setRemoving() {
-        for (;;) {
-            int oldState = handlerState;
-            if (HANDLER_STATE_UPDATER.compareAndSet(this, oldState, REMOVE_PENDING)) {
-                return;
-            } 
-        }
+//        
+//        for (;;) {
+//            int oldState = handlerState;
+//            if (HANDLER_STATE_UPDATER.compareAndSet(this, oldState, REMOVE_PENDING)) {
+//                return;
+//            } 
+//        }
     }
 
     final void setAddComplete() {
@@ -984,6 +988,7 @@ abstract class AbstractChannelHandlerContext extends DefaultAttributeMap
             // oldState is usually ADD_PENDING but can also be REMOVE_COMPLETE when an EventExecutor is used that is not
             // exposing ordering guarantees.
             if (oldState == REMOVE_COMPLETE || HANDLER_STATE_UPDATER.compareAndSet(this, oldState, ADD_COMPLETE)) {
+                System.out.println(oldState + "-> ADD_COMPLETE");
                 return;
             }
         }

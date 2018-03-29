@@ -461,7 +461,6 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         assert ctx != head && ctx != tail;
 
         synchronized (this) {
-            ctx.setRemoving();
             remove0(ctx);
 
             // If the registered is false it means that the channel was not registered on an eventloop yet.
@@ -619,9 +618,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         } catch (Throwable t) {
             boolean removed = false;
             try {
-                ctx.setRemoving();
                 remove0(ctx);
                 try {
+                    ctx.setRemoving();
                     ctx.handler().handlerRemoved(ctx);
                 } finally {
                     ctx.setRemoved();
@@ -649,6 +648,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         // Notify the complete removal.
         try {
             try {
+                ctx.setRemoving();
                 ctx.handler().handlerRemoved(ctx);
             } finally {
                 ctx.setRemoved();
@@ -898,7 +898,6 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
             final EventExecutor executor = ctx.executor();
             if (inEventLoop || executor.inEventLoop(currentThread)) {
-                ctx.setRemoving();
                 synchronized (this) {
                     remove0(ctx);
                 }
@@ -1477,8 +1476,8 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                                 "Can't invoke handlerAdded() as the EventExecutor {} rejected it, removing handler {}.",
                                 executor, ctx.name(), e);
                     }
-                    ctx.setRemoving();
                     remove0(ctx);
+                    ctx.setRemoving();
                     ctx.setRemoved();
                 }
             }
@@ -1493,7 +1492,6 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void run() {
-            ctx.setRemoving();
             callHandlerRemoved0(ctx);
         }
 
@@ -1512,6 +1510,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                                         " removing handler {}.", executor, ctx.name(), e);
                     }
                     // remove0(...) was call before so just call AbstractChannelHandlerContext.setRemoved().
+                    ctx.setRemoving();
                     ctx.setRemoved();
                 }
             }
