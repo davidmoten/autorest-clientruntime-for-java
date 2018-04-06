@@ -73,7 +73,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertTrue;
 
-@Ignore("Should only be run manually")
+//@Ignore("Should only be run manually")
 public class RestProxyStressTests {
     private static IOService service;
 
@@ -187,7 +187,7 @@ public class RestProxyStressTests {
     }
 
     private static final Path TEMP_FOLDER_PATH = Paths.get("temp");
-    private static final int NUM_FILES = 100;
+    private static final int NUM_FILES = 1;
     private static final int FILE_SIZE = 1024 * 1024 * 100;
     private static final int CHUNK_SIZE = 8192;
     private static final int CHUNKS_PER_FILE = FILE_SIZE / CHUNK_SIZE;
@@ -271,7 +271,8 @@ public class RestProxyStressTests {
                 .zipWith(md5s, (id, md5) -> {
                     final AsynchronousFileChannel fileStream = AsynchronousFileChannel.open(TEMP_FOLDER_PATH.resolve("100m-" + id + ".dat"));
                     Flowable<ByteBuffer> stream = FlowableUtil.readFile(fileStream);
-                    return service.upload100MB(String.valueOf(id), sas, "BlockBlob", stream, FILE_SIZE).flatMapCompletable(response -> {
+                    return service.upload100MB(String.valueOf(id), sas, "BlockBlob", stream, FILE_SIZE)
+                            .flatMapCompletable(response -> {
                         String base64MD5 = response.rawHeaders().get("Content-MD5");
                         byte[] receivedMD5 = Base64.getDecoder().decode(base64MD5);
                         assertArrayEquals(md5, receivedMD5);

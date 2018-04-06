@@ -331,11 +331,15 @@ public final class NettyClient extends HttpClient {
                 if (!future.isSuccess()) {
                     subscription.cancel();
                     emitError(future.cause());
+                } else {
+                    System.out.println(Thread.currentThread().getName() + " requesting");
+                    subscription.request(1);
                 }
             };
 
             @Override
             public void onNext(ByteBuffer buf) {
+                System.out.println(Thread.currentThread().getName() + " arrived");
                 if (done) {
                     return;
                 }
@@ -343,10 +347,6 @@ public final class NettyClient extends HttpClient {
                     channel
                         .writeAndFlush(Unpooled.wrappedBuffer(buf))
                         .addListener(onChannelWriteComplete);
-
-                    if (channel.isWritable()) {
-                        subscription.request(1);
-                    }
                 } catch (Exception e) {
                     subscription.cancel();
                     onError(e);
@@ -356,6 +356,7 @@ public final class NettyClient extends HttpClient {
             @Override
             public void onError(Throwable t) {
                 if (done) {
+                    RxJavaPlugins.onError(t);
                     return;
                 }
                 done = true;
@@ -428,6 +429,7 @@ public final class NettyClient extends HttpClient {
         }
 
         void emitError(Throwable throwable) {
+            throwable.printStackTrace();
             while (true) {
                 int s = state.get();
                 if (transition(s, ACQUIRING_NOT_DISPOSED, ACQUIRING_DISPOSED)) {

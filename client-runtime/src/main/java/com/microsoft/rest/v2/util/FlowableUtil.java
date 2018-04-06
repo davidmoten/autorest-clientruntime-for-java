@@ -45,10 +45,10 @@ public final class FlowableUtil {
      * @param entityTypeToken the type to check
      * @return whether the type represents a Flowable that emits byte arrays
      */
-    public static boolean isFlowableByteBuffer(TypeToken entityTypeToken) {
+    public static boolean isFlowableByteBuffer(TypeToken<?> entityTypeToken) {
         if (entityTypeToken.isSubtypeOf(Flowable.class)) {
             final Type innerType = ((ParameterizedType) entityTypeToken.getType()).getActualTypeArguments()[0];
-            final TypeToken innerTypeToken = TypeToken.of(innerType);
+            final TypeToken<?> innerTypeToken = TypeToken.of(innerType);
             if (innerTypeToken.isSubtypeOf(ByteBuffer.class)) {
                 return true;
             }

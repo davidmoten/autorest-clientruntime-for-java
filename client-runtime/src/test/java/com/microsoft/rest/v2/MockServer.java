@@ -28,13 +28,15 @@ public class MockServer {
             } catch (NoSuchAlgorithmException e) {
                 throw new RuntimeException(e);
             }
-
+            int c = 0;
             while (true) {
                 int bytesRead = is.read(buf);
                 if (bytesRead == -1) {
                     break;
                 }
                 md5.update(buf, 0, bytesRead);
+                c+= bytesRead;
+                System.out.println((c/1024/1024)+ "MB read");
             }
 
             byte[] md5Digest = md5.digest();
